@@ -18,5 +18,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# OS files
+# editor / IDE
+/.idea
+/.vscode
+/.cursor
+
+# OS
 .DS_Store
+Thumbs.db
+
+#opencode
+/.opencode
+/.omo
+/.playwright-mcp
+.log
