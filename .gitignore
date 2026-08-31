@@ -28,6 +28,7 @@ yarn-error.log*
 Thumbs.db
 
 #opencode
+/.codegraph
 /.opencode
 /.omo
 /.playwright-mcp

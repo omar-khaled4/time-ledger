@@ -28,8 +28,20 @@ function dayOfWeekForDateStr(s) {
   return parseDateStr(s).getDay();
 }
 function formatHM(dateObj) {
-  if (!dateObj) return "\u2014";
-  return `${pad2(dateObj.getHours())}:${pad2(dateObj.getMinutes())}`;
+  if (!dateObj) return "—";
+  let h = dateObj.getHours();
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${pad2(dateObj.getMinutes())} ${ampm}`;
+}
+function formatClock12(dateObj) {
+  if (!dateObj) return "—";
+  let h = dateObj.getHours();
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  if (h === 0) h = 12;
+  return `${h}:${pad2(dateObj.getMinutes())}:${pad2(dateObj.getSeconds())} ${ampm}`;
 }
 function hoursBetween(isoStart, endDate) {
   if (!isoStart) return 0;
@@ -113,6 +125,7 @@ export default function Dashboard({ session }) {
   const [draft, setDraft] = useState({ date: todayDateStr(), clockIn: "09:00", clockOut: "18:00" });
   const fileInputRef = useRef(null);
   const settingsSaveTimer = useRef(null);
+  const [selectedMonth, setSelectedMonth] = useState(() => todayDateStr().slice(0, 7));
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -211,10 +224,23 @@ export default function Dashboard({ session }) {
     persistEntry(userId, entry).catch(console.error);
   }
 
-  const monthPrefix = todayStr.slice(0, 7);
-  const [curYear, curMonthIdx] = [Number(todayStr.slice(0, 4)), Number(todayStr.slice(5, 7)) - 1];
+  const currentMonth = todayDateStr().slice(0, 7);
+  const isCurrentMonth = selectedMonth === currentMonth;
+  const monthPrefix = selectedMonth;
+  const [curYear, curMonthIdx] = [Number(selectedMonth.slice(0, 4)), Number(selectedMonth.slice(5, 7)) - 1];
   const totalDaysThisMonth = daysInMonth(curYear, curMonthIdx);
   const todayDayNum = Number(todayStr.slice(8, 10));
+  const effectiveTodayDayNum = isCurrentMonth ? todayDayNum : (selectedMonth < currentMonth ? totalDaysThisMonth : 0);
+
+  // Auto-navigate to current month when the calendar month rolls over
+  const prevCurrentMonthRef = useRef(currentMonth);
+  useEffect(() => {
+    if (currentMonth !== prevCurrentMonthRef.current) {
+      prevCurrentMonthRef.current = currentMonth;
+      setSelectedMonth(currentMonth);
+    }
+  }, [currentMonth]);
+
 
   const monthStats = useMemo(() => {
     const chartData = [];
@@ -226,7 +252,7 @@ export default function Dashboard({ session }) {
       const isHoliday = settings.holidayDays.includes(dayOfWeekForDateStr(dateStr));
       if (!isHoliday) {
         standardWorkdaysInMonth++;
-        if (d <= todayDayNum) elapsedStandardWorkdays++;
+        if (d <= effectiveTodayDayNum) elapsedStandardWorkdays++;
       }
       const entry = entries.find((e) => e.date === dateStr);
       const stats = computeEntryStats(entry, settings, now);
@@ -240,7 +266,7 @@ export default function Dashboard({ session }) {
         overtimeHours: Number(stats.overtimeHours.toFixed(2)),
         pay: Number(stats.pay.toFixed(2)),
         isHoliday,
-        isFuture: d > todayDayNum,
+        isFuture: d > effectiveTodayDayNum,
       });
     }
 
@@ -256,24 +282,41 @@ export default function Dashboard({ session }) {
       ? Math.min(1, totalRegularHours / (elapsedStandardWorkdays * settings.hoursPerDay))
       : 0;
     const projectedRegularPay = settings.monthlySalary * regularHoursRatio;
-    const avgOvertimePayPerElapsedDay = todayDayNum > 0 ? overtimePayLogged / todayDayNum : 0;
+    const avgOvertimePayPerElapsedDay = effectiveTodayDayNum > 0 ? overtimePayLogged / effectiveTodayDayNum : 0;
     const projectedOvertimePay = avgOvertimePayPerElapsedDay * totalDaysThisMonth;
     const projectedTotal = projectedRegularPay + projectedOvertimePay;
 
     return { chartData, totalRegularHours, totalOvertimeHours, totalPay, projectedTotal, hourlyRate };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, settings, minuteKey, curYear, curMonthIdx, totalDaysThisMonth, todayDayNum]);
+  }, [entries, settings, minuteKey, curYear, curMonthIdx, totalDaysThisMonth, effectiveTodayDayNum]);
 
   const monthEntries = useMemo(
     () => entries.filter((e) => e.date.startsWith(monthPrefix)).sort((a, b) => (a.date < b.date ? 1 : -1)),
     [entries, monthPrefix]
   );
 
+  const availableMonths = useMemo(() => {
+    const months = new Set(entries.map((e) => e.date.slice(0, 7)));
+    months.add(currentMonth);
+    return [...months].sort().reverse();
+  }, [entries, currentMonth]);
+
+  function goToPrevMonth() {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    setSelectedMonth(m === 1 ? `${y - 1}-12` : `${y}-${pad2(m - 1)}`);
+  }
+  function goToNextMonth() {
+    const [y, m] = selectedMonth.split('-').map(Number);
+    setSelectedMonth(m === 12 ? `${y + 1}-01` : `${y}-${pad2(m + 1)}`);
+  }
+
+
   const heroElapsed = heroState === "out" && todayEntry ? hoursBetween(todayEntry.clockIn, now) : 0;
 
   function exportExcel() {
     const wb = XLSX.utils.book_new();
-    const logRows = [...entries].sort((a, b) => (a.date < b.date ? -1 : 1)).map((e) => {
+    const monthEntriesToExport = entries.filter((e) => e.date.startsWith(monthPrefix));
+    const logRows = [...monthEntriesToExport].sort((a, b) => (a.date < b.date ? -1 : 1)).map((e) => {
       const s = computeEntryStats(e, settings, now);
       return {
         Date: e.date,
@@ -299,26 +342,9 @@ export default function Dashboard({ session }) {
     ];
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(settingsRows), "Settings");
 
-    const byMonth = {};
-    entries.forEach((e) => {
-      const key = e.date.slice(0, 7);
-      if (!byMonth[key]) byMonth[key] = { days: 0, regular: 0, overtime: 0, pay: 0 };
-      const s = computeEntryStats(e, settings, now);
-      byMonth[key].days += 1;
-      byMonth[key].regular += s.regularHours;
-      byMonth[key].overtime += s.overtimeHours;
-      byMonth[key].pay += s.pay;
-    });
-    const summaryRows = Object.keys(byMonth).sort().map((key) => ({
-      Month: key,
-      "Days Logged": byMonth[key].days,
-      "Regular Hours": Number(byMonth[key].regular.toFixed(2)),
-      "Overtime Hours": Number(byMonth[key].overtime.toFixed(2)),
-      "Total Pay": Number(byMonth[key].pay.toFixed(2)),
-    }));
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), "Monthly Summary");
-
-    XLSX.writeFile(wb, "time-ledger.xlsx");
+    const [exportYear, exportMonth] = monthPrefix.split('-');
+    const fileName = `time-ledger-${exportYear}-${exportMonth}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   }
 
   function importExcel(file) {
@@ -427,6 +453,15 @@ export default function Dashboard({ session }) {
         .tl-del:hover { color: var(--rust); }
         .tl-empty { color: var(--text-dim); font-size: 13px; padding: 20px 0; text-align: center; }
         .tl-note { color: var(--text-dim); font-size: 12px; margin-top: 10px; }
+        .tl-month-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; justify-content: center; flex-wrap: wrap; }
+        .tl-month-arrow { background: var(--ink-soft); border: 1px solid var(--ink-line); color: var(--text); border-radius: 8px; padding: 6px 12px; font-size: 18px; cursor: pointer; line-height: 1; }
+        .tl-month-arrow:hover { border-color: var(--brass); color: var(--brass); }
+        .tl-month-select { background: var(--ink-soft); border: 1px solid var(--ink-line); color: var(--text); border-radius: 8px; padding: 7px 12px; font-family: var(--sans); font-size: 14px; font-weight: 600; cursor: pointer; }
+        .tl-month-select:focus { outline: none; border-color: var(--brass); }
+        .tl-month-select option { background: var(--ink); color: var(--text); }
+        .tl-month-return { font-size: 12px; padding: 5px 10px; }
+        .tl-month-badge { background: var(--ink-line); color: var(--text-dim); border-radius: 20px; padding: 4px 12px; font-size: 11px; margin-left: 4px; }
+
         @media (max-width: 720px) {
           .tl-stats { grid-template-columns: repeat(2, 1fr); }
           .tl-charts { grid-template-columns: 1fr; }
@@ -441,9 +476,11 @@ export default function Dashboard({ session }) {
             <p className="tl-date">{DAY_NAMES[now.getDay()]}, {MONTH_NAMES[now.getMonth()]} {now.getDate()} {now.getFullYear()} · {session.user.email}</p>
           </div>
           <div className="tl-top-actions">
-            <button className="tl-gear" onClick={() => setShowSettings((s) => !s)}>
-              <Settings2 size={15} /> Salary &amp; hours
-            </button>
+            {isCurrentMonth && (
+              <button className="tl-gear" onClick={() => setShowSettings((s) => !s)}>
+                <Settings2 size={15} /> Salary &amp; hours
+              </button>
+            )}
             <button className="tl-gear" onClick={() => supabase.auth.signOut()}>
               <SignOutIcon size={15} /> Sign out
             </button>
@@ -452,29 +489,49 @@ export default function Dashboard({ session }) {
 
         <div className="tl-hero">
           <div>
-            <div className="tl-clock">{pad2(now.getHours())}:{pad2(now.getMinutes())}:{pad2(now.getSeconds())}</div>
+            <div className="tl-clock">{formatClock12(now)}</div>
             <div className="tl-clock-sub">
-              {heroState === "in" && "Not clocked in yet today"}
-              {heroState === "out" && `Clocked in at ${formatHM(new Date(todayEntry.clockIn))} \u00b7 ${fmtHours(heroElapsed)} elapsed`}
-              {heroState === "done" && todayEntry && `Worked ${formatHM(new Date(todayEntry.clockIn))} \u2013 ${formatHM(new Date(todayEntry.clockOut))} today`}
+              {isCurrentMonth && heroState === "in" && "Not clocked in yet today"}
+              {isCurrentMonth && heroState === "out" && `Clocked in at ${formatHM(new Date(todayEntry.clockIn))} \u00b7 ${fmtHours(heroElapsed)} elapsed`}
+              {isCurrentMonth && heroState === "done" && todayEntry && `Worked ${formatHM(new Date(todayEntry.clockIn))} \u2013 ${formatHM(new Date(todayEntry.clockOut))} today`}
+              {!isCurrentMonth && `Viewing ${MONTH_NAMES[curMonthIdx]} ${curYear}`}
             </div>
           </div>
           <div className="tl-hero-right">
-            {heroState === "in" && (
+            {isCurrentMonth && heroState === "in" && (
               <button className="tl-punch-btn tl-punch-in" onClick={handleClockIn}><LogIn size={18} /> Clock in</button>
             )}
-            {heroState === "out" && (
+            {isCurrentMonth && heroState === "out" && (
               <button className="tl-punch-btn tl-punch-out" onClick={handleClockOut}><LogOut size={18} /> Clock out</button>
             )}
-            {heroState === "done" && (
+            {isCurrentMonth && heroState === "done" && (
               <button className="tl-punch-btn tl-punch-done" onClick={handleResume}><RotateCcw size={16} /> Resume today</button>
+            )}
+            {!isCurrentMonth && (
+              <span className="tl-month-badge">History — read only</span>
             )}
           </div>
         </div>
 
+        <div className="tl-month-nav">
+          <button className="tl-month-arrow" onClick={goToPrevMonth}>&#8249;</button>
+          <select className="tl-month-select" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}>
+            {availableMonths.map((m) => {
+              const [y, mo] = m.split('-').map(Number);
+              return <option key={m} value={m}>{MONTH_NAMES[mo - 1]} {y}</option>;
+            })}
+          </select>
+          <button className="tl-month-arrow" onClick={goToNextMonth}>&#8250;</button>
+          {!isCurrentMonth && (
+            <button className="tl-btn tl-month-return" onClick={() => setSelectedMonth(currentMonth)}>
+              <RotateCcw size={13} /> Current month
+            </button>
+          )}
+        </div>
+
         <div className="tl-stats">
           <div className="tl-stat">
-            <div className="tl-stat-label">Hours this month</div>
+            <div className="tl-stat-label">Hours — {MONTH_NAMES[curMonthIdx]}</div>
             <div className="tl-stat-value">{fmtHours(monthStats.totalRegularHours + monthStats.totalOvertimeHours)}</div>
           </div>
           <div className="tl-stat">
@@ -520,7 +577,7 @@ export default function Dashboard({ session }) {
           </div>
         </div>
 
-        {showSettings && (
+        {isCurrentMonth && showSettings && (
           <div className="tl-settings">
             <h3>Salary &amp; work hours</h3>
             <div className="tl-grid2">
@@ -574,6 +631,7 @@ export default function Dashboard({ session }) {
             </div>
           </div>
 
+          {isCurrentMonth && (
           <div className="tl-add-row">
             <div className="tl-field">
               <label>Date</label>
@@ -589,9 +647,10 @@ export default function Dashboard({ session }) {
             </div>
             <button className="tl-btn" onClick={handleSaveDraft}><Plus size={14} /> Add entry</button>
           </div>
+          )}
 
           {monthEntries.length === 0 ? (
-            <div className="tl-empty">No entries yet this month. Clock in above, or add one manually.</div>
+            <div className="tl-empty">{isCurrentMonth ? "No entries yet this month. Clock in above, or add one manually." : "No entries recorded for this month."}</div>
           ) : (
             <table className="tl-table">
               <thead>
@@ -610,7 +669,7 @@ export default function Dashboard({ session }) {
                       <td>{fmtHours(s.regularHours)}</td>
                       <td>{fmtHours(s.overtimeHours)}</td>
                       <td>{currency} {s.pay.toFixed(0)}</td>
-                      <td><button className="tl-del" onClick={() => handleDelete(e.date)}><Trash2 size={14} /></button></td>
+                      <td>{isCurrentMonth && <button className="tl-del" onClick={() => handleDelete(e.date)}><Trash2 size={14} /></button>}</td>
                     </tr>
                   );
                 })}

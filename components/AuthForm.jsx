@@ -2,10 +2,11 @@
 import { useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-export default function AuthForm() {
-  const [mode, setMode] = useState("signin");
+export default function AuthForm({ initialMode = "signin" }) {
+  const [mode, setMode] = useState(initialMode === "reset" ? "reset" : "signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,10 +20,18 @@ export default function AuthForm() {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-      } else {
+      } else if (mode === "signup") {
         const { error } = await supabase.auth.signUp({ email, password });
         if (error) throw error;
         setNotice("Check your email to confirm your account, then sign in.");
+        setMode("signin");
+      } else {
+        // reset: user clicked the recovery link and is setting a new password
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        if (error) throw error;
+        setNotice("Password updated! Sign back in.");
+        setMode("signin");
+        setNewPassword("");
       }
     } catch (err) {
       setError(err.message);
@@ -31,33 +40,114 @@ export default function AuthForm() {
     }
   }
 
+  async function handleForgot(e) {
+    e.preventDefault();
+    setError("");
+    setNotice("");
+    if (!email) {
+      setError("Enter the email for your account first.");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setNotice("Check your email for a password reset link.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function switchMode(m) {
+    setMode(m);
+    setError("");
+    setNotice("");
+  }
+
   return (
     <div style={styles.wrap}>
       <form onSubmit={handleSubmit} style={styles.card}>
         <h1 style={styles.title}>
           Time <span style={{ color: "#C98A3B" }}>Ledger</span>
         </h1>
-        <p style={styles.sub}>{mode === "signin" ? "Sign in to your ledger" : "Create your account"}</p>
+        <p style={styles.sub}>
+          {mode === "signin" && "Sign in to your ledger"}
+          {mode === "signup" && "Create your account"}
+          {mode === "reset" && "Set a new password"}
+        </p>
 
-        <label style={styles.label}>Email</label>
-        <input style={styles.input} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        {mode === "reset" ? (
+          <>
+            <label style={styles.label}>New password</label>
+            <input
+              style={styles.input}
+              type="password"
+              required
+              minLength={6}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="At least 6 characters"
+            />
+          </>
+        ) : (
+          <>
+            <label style={styles.label}>Email</label>
+            <input style={styles.input} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
 
-        <label style={styles.label}>Password</label>
-        <input style={styles.input} type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+            <label style={styles.label}>Password</label>
+            <input style={styles.input} type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
+          </>
+        )}
 
         {error && <p style={styles.error}>{error}</p>}
         {notice && <p style={styles.notice}>{notice}</p>}
 
         <button style={styles.btn} disabled={loading} type="submit">
-          {loading ? "Please wait\u2026" : mode === "signin" ? "Sign in" : "Sign up"}
+          {loading
+            ? "Please wait…"
+            : mode === "reset"
+            ? "Update password"
+            : mode === "signin"
+            ? "Sign in"
+            : "Sign up"}
         </button>
-        <button
-          type="button"
-          style={styles.link}
-          onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-        >
-          {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
-        </button>
+
+        {mode === "forgot" ? (
+          <>
+            <label style={styles.label}>Email</label>
+            <input style={styles.input} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+            <button style={styles.btn} type="button" onClick={handleForgot} disabled={loading}>
+              Send reset link
+            </button>
+            <button type="button" style={styles.link} onClick={() => switchMode("signin")}>
+              Back to sign in
+            </button>
+          </>
+        ) : (
+          <>
+            {mode === "signin" && (
+              <button type="button" style={styles.link} onClick={() => switchMode("forgot")} disabled={loading}>
+                Forgot password?
+              </button>
+            )}
+            {mode === "reset" && (
+              <button type="button" style={styles.link} onClick={() => switchMode("signin")}>
+                Back to sign in
+              </button>
+            )}
+            <button
+              type="button"
+              style={styles.link}
+              onClick={() => switchMode(mode === "signin" ? "signup" : "signin")}
+            >
+              {mode === "signin" ? "Need an account? Sign up" : "Already have an account? Sign in"}
+            </button>
+          </>
+        )}
       </form>
     </div>
   );
