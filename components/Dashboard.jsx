@@ -327,10 +327,25 @@ export default function Dashboard({ session }) {
         "Regular Hours": Number(s.regularHours.toFixed(2)),
         "Overtime Hours": Number(s.overtimeHours.toFixed(2)),
         Holiday: s.isHoliday ? "Yes" : "No",
-        Pay: Number(s.pay.toFixed(2)),
       };
     });
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(logRows), "Attendance Log");
+    const sheet = XLSX.utils.json_to_sheet(logRows);
+    if (logRows.length > 0) {
+      const totals = logRows.reduce((acc, r) => ({
+
+        hours: acc.hours + r["Hours Worked"],
+        regular: acc.regular + r["Regular Hours"],
+        overtime: acc.overtime + r["Overtime Hours"],
+      }), { hours: 0, regular: 0, overtime: 0 });
+      XLSX.utils.sheet_add_json(sheet, [{
+
+        Date: "TOTAL",
+        "Hours Worked": Number(totals.hours.toFixed(2)),
+        "Regular Hours": Number(totals.regular.toFixed(2)),
+        "Overtime Hours": Number(totals.overtime.toFixed(2)),
+      }], { origin: -1 });
+    }
+    XLSX.utils.book_append_sheet(wb, sheet, "Attendance Log");
 
     const settingsRows = [
       { Setting: "Monthly Salary", Value: settings.monthlySalary },
@@ -401,6 +416,7 @@ export default function Dashboard({ session }) {
           --sans: 'IBM Plex Sans', system-ui, sans-serif; --mono: 'IBM Plex Mono', 'Courier New', monospace;
           background: var(--ink); color: var(--text); font-family: var(--sans);
           min-height: 100vh; padding: 28px 20px 60px; box-sizing: border-box;
+          overflow-x: hidden;
         }
         .tl-root * { box-sizing: border-box; }
         .tl-wrap { max-width: 980px; margin: 0 auto; }
@@ -445,10 +461,11 @@ export default function Dashboard({ session }) {
         .tl-btn:hover { border-color: var(--brass); }
         .tl-btn.primary { background: var(--brass); color: #1B1D22; border-color: var(--brass); font-weight: 600; }
         .tl-add-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; gap: 10px; margin-bottom: 16px; align-items: end; }
-        table.tl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        table.tl-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
         table.tl-table th { text-align: left; color: var(--text-dim); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--ink-line); font-size: 12px; }
         table.tl-table td { padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); font-family: var(--mono); }
         table.tl-table tr.holiday td { color: var(--rust); }
+        .tl-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--ink-line); border-radius: 8px; }
         .tl-del { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; }
         .tl-del:hover { color: var(--rust); }
         .tl-empty { color: var(--text-dim); font-size: 13px; padding: 20px 0; text-align: center; }
@@ -463,9 +480,26 @@ export default function Dashboard({ session }) {
         .tl-month-badge { background: var(--ink-line); color: var(--text-dim); border-radius: 20px; padding: 4px 12px; font-size: 11px; margin-left: 4px; }
 
         @media (max-width: 720px) {
-          .tl-stats { grid-template-columns: repeat(2, 1fr); }
+          .tl-root { padding: 18px 12px 50px; }
+          .tl-stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
           .tl-charts { grid-template-columns: 1fr; }
           .tl-add-row { grid-template-columns: 1fr 1fr; }
+          .tl-hero { padding: 20px; gap: 16px; flex-direction: column; align-items: flex-start; }
+          .tl-clock { font-size: 34px; }
+          .tl-punch-btn { padding: 14px 22px; font-size: 14px; width: 100%; justify-content: center; }
+          .tl-hero-right { align-items: stretch; width: 100%; }
+          .tl-stat-value { font-size: 17px; }
+          .tl-log-top { flex-direction: column; align-items: flex-start; }
+          .tl-actions { width: 100%; }
+          .tl-btn { flex: 1; justify-content: center; }
+          .tl-log { padding: 14px; }
+          .tl-title { font-size: 19px; }
+          .tl-top-actions { flex-wrap: wrap; }
+        }
+        @media (max-width: 400px) {
+          .tl-add-row { grid-template-columns: 1fr; }
+          .tl-month-select { font-size: 13px; }
+          .tl-grid2 { grid-template-columns: 1fr; }
         }
       `}</style>
 
@@ -652,6 +686,7 @@ export default function Dashboard({ session }) {
           {monthEntries.length === 0 ? (
             <div className="tl-empty">{isCurrentMonth ? "No entries yet this month. Clock in above, or add one manually." : "No entries recorded for this month."}</div>
           ) : (
+            <div className="tl-table-wrap">
             <table className="tl-table">
               <thead>
                 <tr><th>Date</th><th>Day</th><th>In</th><th>Out</th><th>Hours</th><th>Regular</th><th>Overtime</th><th>Pay</th><th></th></tr>
@@ -675,6 +710,7 @@ export default function Dashboard({ session }) {
                 })}
               </tbody>
             </table>
+            </div>
           )}
           <p className="tl-note">Rows tinted red are holidays (Friday &amp; Saturday by default) — any hours logged there count fully as overtime. On workdays, hours beyond your set hours-per-day also count as overtime.</p>
         </div>
