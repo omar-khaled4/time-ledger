@@ -438,7 +438,7 @@ export default function Dashboard({ session }) {
         <div className="tl-top">
           <div>
             <p className="tl-title">Time <span>Ledger</span></p>
-            <p className="tl-date">{DAY_NAMES[now.getDay()]}, {MONTH_NAMES[now.getMonth()]} {now.getDate()} {now.getFullYear()} \u00b7 {session.user.email}</p>
+            <p className="tl-date">{DAY_NAMES[now.getDay()]}, {MONTH_NAMES[now.getMonth()]} {now.getDate()} {now.getFullYear()} · {session.user.email}</p>
           </div>
           <div className="tl-top-actions">
             <button className="tl-gear" onClick={() => setShowSettings((s) => !s)}>
@@ -493,7 +493,7 @@ export default function Dashboard({ session }) {
 
         <div className="tl-charts">
           <div className="tl-panel">
-            <h3>Daily hours \u2014 {MONTH_NAMES[curMonthIdx]}</h3>
+            <h3>Daily hours — {MONTH_NAMES[curMonthIdx]}</h3>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={monthStats.chartData} barGap={0} barCategoryGap="20%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#34383F" vertical={false} />
@@ -507,7 +507,7 @@ export default function Dashboard({ session }) {
             </ResponsiveContainer>
           </div>
           <div className="tl-panel">
-            <h3>Cumulative pay \u2014 {MONTH_NAMES[curMonthIdx]}</h3>
+            <h3>Cumulative pay — {MONTH_NAMES[curMonthIdx]}</h3>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={monthStats.chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#34383F" vertical={false} />
@@ -559,13 +559,13 @@ export default function Dashboard({ session }) {
                 </div>
               </div>
             </div>
-            <p className="tl-note">Hourly rate is derived as monthly salary \u00f7 standard hours per month, currently {currency} {monthStats.hourlyRate.toFixed(2)}/hr. Changes save automatically to your account.</p>
+            <p className="tl-note">Hourly rate is derived as monthly salary ÷ standard hours per month, currently {currency} {monthStats.hourlyRate.toFixed(2)}/hr. Changes save automatically to your account.</p>
           </div>
         )}
 
         <div className="tl-log">
           <div className="tl-log-top">
-            <h3>Attendance log \u2014 {MONTH_NAMES[curMonthIdx]} {curYear}</h3>
+            <h3>Attendance log — {MONTH_NAMES[curMonthIdx]} {curYear}</h3>
             <div className="tl-actions">
               <button className="tl-btn" onClick={() => fileInputRef.current?.click()}><Upload size={14} /> Import Excel</button>
               <input ref={fileInputRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }}
@@ -617,7 +617,7 @@ export default function Dashboard({ session }) {
               </tbody>
             </table>
           )}
-          <p className="tl-note">Rows tinted red are holidays (Friday &amp; Saturday by default) \u2014 any hours logged there count fully as overtime. On workdays, hours beyond your set hours-per-day also count as overtime.</p>
+          <p className="tl-note">Rows tinted red are holidays (Friday &amp; Saturday by default) — any hours logged there count fully as overtime. On workdays, hours beyond your set hours-per-day also count as overtime.</p>
         </div>
       </div>
     </div>

@@ -18,7 +18,7 @@ export default function Page() {
   if (session === undefined) {
     return (
       <div style={{ background: "#1B1D22", minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "#9C9C90", fontFamily: "system-ui, sans-serif" }}>
-        Loading\u2026
+        Loading…
       </div>
     );
   }
