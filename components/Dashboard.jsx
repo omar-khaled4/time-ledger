@@ -6,7 +6,7 @@ import {
 } from "recharts";
 import {
   LogIn, LogOut, RotateCcw, Settings2, Download, Upload,
-  Trash2, Plus, LogOut as SignOutIcon,
+  Trash2, Plus, LogOut as SignOutIcon, X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
@@ -122,6 +122,7 @@ export default function Dashboard({ session }) {
   const [loaded, setLoaded] = useState(false);
   const [now, setNow] = useState(new Date());
   const [showSettings, setShowSettings] = useState(false);
+  const [settingsDraft, setSettingsDraft] = useState(defaultSettings);
   const [draft, setDraft] = useState({ date: todayDateStr(), clockIn: "09:00", clockOut: "18:00" });
   const fileInputRef = useRef(null);
   const settingsSaveTimer = useRef(null);
@@ -180,6 +181,20 @@ export default function Dashboard({ session }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings]);
 
+  useEffect(() => {
+    if (!showSettings) return;
+    function onKeyDown(e) {
+      if (e.key === "Escape") setShowSettings(false);
+    }
+    document.addEventListener("keydown", onKeyDown);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [showSettings]);
+
   const minuteKey = Math.floor(now.getTime() / 60000);
   const todayStr = todayDateStr();
   const todayEntry = entries.find((e) => e.date === todayStr);
@@ -222,6 +237,17 @@ export default function Dashboard({ session }) {
     const clockOutIso = draft.clockOut ? new Date(`${draft.date}T${draft.clockOut}:00`).toISOString() : null;
     const entry = upsertLocalEntry(draft.date, clockInIso, clockOutIso);
     persistEntry(userId, entry).catch(console.error);
+  }
+  function openSettings() {
+    setSettingsDraft(settings);
+    setShowSettings(true);
+  }
+  function closeSettings() {
+    setShowSettings(false);
+  }
+  function saveSettings() {
+    setSettings({ ...settingsDraft });
+    setShowSettings(false);
   }
 
   const currentMonth = todayDateStr().slice(0, 7);
@@ -404,6 +430,7 @@ export default function Dashboard({ session }) {
   }
 
   const currency = settings.currency;
+  const draftHourlyRate = settingsDraft.standardMonthlyHours > 0 ? settingsDraft.monthlySalary / settingsDraft.standardMonthlyHours : 0;
 
   return (
     <div className="tl-root">
@@ -444,8 +471,6 @@ export default function Dashboard({ session }) {
         .tl-charts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
         .tl-panel { background: var(--ink-soft); border: 1px solid var(--ink-line); border-radius: 12px; padding: 18px; }
         .tl-panel h3 { margin: 0 0 14px; font-size: 14px; font-weight: 600; color: var(--text); }
-        .tl-settings { background: var(--ink-soft); border: 1px solid var(--ink-line); border-radius: 12px; padding: 20px; margin-bottom: 20px; }
-        .tl-settings h3 { margin: 0 0 16px; font-size: 15px; }
         .tl-grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
         .tl-field label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
         .tl-field input, .tl-field select { width: 100%; background: var(--ink); border: 1px solid var(--ink-line); color: var(--text); border-radius: 8px; padding: 9px 10px; font-family: var(--sans); font-size: 13px; }
@@ -478,6 +503,18 @@ export default function Dashboard({ session }) {
         .tl-month-select option { background: var(--ink); color: var(--text); }
         .tl-month-return { font-size: 12px; padding: 5px 10px; }
         .tl-month-badge { background: var(--ink-line); color: var(--text-dim); border-radius: 20px; padding: 4px 12px; font-size: 11px; margin-left: 4px; }
+        .tl-overlay { position: fixed; inset: 0; background: rgba(10,11,13,0.72); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; padding: 20px; z-index: 100; animation: tl-fade 0.15s ease-out; }
+        @keyframes tl-fade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes tl-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
+        .tl-modal { background: var(--ink-soft); border: 1px solid var(--ink-line); border-radius: 14px; width: 100%; max-width: 520px; max-height: calc(100vh - 40px); display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,0.5); animation: tl-rise 0.18s ease-out; }
+        .tl-modal-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--ink-line); }
+        .tl-modal-top h3 { margin: 0; font-size: 15px; }
+        .tl-modal-close { background: none; border: none; color: var(--text-dim); cursor: pointer; padding: 4px; display: flex; }
+        .tl-modal-close:hover { color: var(--rust); }
+        .tl-modal-body { padding: 20px; overflow-y: auto; }
+        .tl-modal-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--ink-line); }
+        .tl-modal-rate { font-family: var(--mono); color: var(--text-dim); font-size: 12px; }
+        .tl-modal-rate b { color: var(--brass-soft); font-weight: 600; }
 
         @media (max-width: 720px) {
           .tl-root { padding: 18px 12px 50px; }
@@ -495,6 +532,10 @@ export default function Dashboard({ session }) {
           .tl-log { padding: 14px; }
           .tl-title { font-size: 19px; }
           .tl-top-actions { flex-wrap: wrap; }
+          .tl-modal { max-height: calc(100vh - 24px); }
+          .tl-overlay { padding: 12px; }
+          .tl-modal-body { padding: 16px; }
+          .tl-modal-foot { padding: 12px 16px; }
         }
         @media (max-width: 400px) {
           .tl-add-row { grid-template-columns: 1fr; }
@@ -511,7 +552,7 @@ export default function Dashboard({ session }) {
           </div>
           <div className="tl-top-actions">
             {isCurrentMonth && (
-              <button className="tl-gear" onClick={() => setShowSettings((s) => !s)}>
+              <button className="tl-gear" onClick={openSettings}>
                 <Settings2 size={15} /> Salary &amp; hours
               </button>
             )}
@@ -612,45 +653,58 @@ export default function Dashboard({ session }) {
         </div>
 
         {isCurrentMonth && showSettings && (
-          <div className="tl-settings">
-            <h3>Salary &amp; work hours</h3>
-            <div className="tl-grid2">
-              <div className="tl-field">
-                <label>Monthly salary</label>
-                <input type="number" value={settings.monthlySalary} onChange={(e) => setSettings((s) => ({ ...s, monthlySalary: Number(e.target.value) }))} />
+          <div className="tl-overlay" onClick={closeSettings}>
+            <div className="tl-modal" role="dialog" aria-modal="true" aria-label="Salary and work hours" onClick={(e) => e.stopPropagation()}>
+              <div className="tl-modal-top">
+                <h3>Salary &amp; work hours</h3>
+                <button className="tl-modal-close" onClick={closeSettings} aria-label="Close"><X size={16} /></button>
               </div>
-              <div className="tl-field">
-                <label>Currency</label>
-                <input type="text" value={settings.currency} onChange={(e) => setSettings((s) => ({ ...s, currency: e.target.value }))} />
-              </div>
-              <div className="tl-field">
-                <label>Hours per workday</label>
-                <input type="number" value={settings.hoursPerDay} onChange={(e) => setSettings((s) => ({ ...s, hoursPerDay: Number(e.target.value) }))} />
-              </div>
-              <div className="tl-field">
-                <label>Standard hours per month</label>
-                <input type="number" value={settings.standardMonthlyHours} onChange={(e) => setSettings((s) => ({ ...s, standardMonthlyHours: Number(e.target.value) }))} />
-              </div>
-              <div className="tl-field">
-                <label>Overtime multiplier</label>
-                <input type="number" step="0.1" value={settings.overtimeMultiplier} onChange={(e) => setSettings((s) => ({ ...s, overtimeMultiplier: Number(e.target.value) }))} />
-              </div>
-              <div className="tl-field">
-                <label>Holiday days (count as overtime)</label>
-                <div className="tl-holidays">
-                  {DAY_NAMES.map((name, idx) => (
-                    <div key={name} className={`tl-day-chip ${settings.holidayDays.includes(idx) ? "active" : ""}`}
-                      onClick={() => setSettings((s) => ({
-                        ...s,
-                        holidayDays: s.holidayDays.includes(idx) ? s.holidayDays.filter((d) => d !== idx) : [...s.holidayDays, idx],
-                      }))}>
-                      {name}
+              <div className="tl-modal-body">
+                <div className="tl-grid2">
+                  <div className="tl-field">
+                    <label>Monthly salary</label>
+                    <input type="number" value={settingsDraft.monthlySalary} onChange={(e) => setSettingsDraft((s) => ({ ...s, monthlySalary: Number(e.target.value) }))} />
+                  </div>
+                  <div className="tl-field">
+                    <label>Currency</label>
+                    <input type="text" value={settingsDraft.currency} onChange={(e) => setSettingsDraft((s) => ({ ...s, currency: e.target.value }))} />
+                  </div>
+                  <div className="tl-field">
+                    <label>Hours per workday</label>
+                    <input type="number" value={settingsDraft.hoursPerDay} onChange={(e) => setSettingsDraft((s) => ({ ...s, hoursPerDay: Number(e.target.value) }))} />
+                  </div>
+                  <div className="tl-field">
+                    <label>Standard hours per month</label>
+                    <input type="number" value={settingsDraft.standardMonthlyHours} onChange={(e) => setSettingsDraft((s) => ({ ...s, standardMonthlyHours: Number(e.target.value) }))} />
+                  </div>
+                  <div className="tl-field">
+                    <label>Overtime multiplier</label>
+                    <input type="number" step="0.1" value={settingsDraft.overtimeMultiplier} onChange={(e) => setSettingsDraft((s) => ({ ...s, overtimeMultiplier: Number(e.target.value) }))} />
+                  </div>
+                  <div className="tl-field">
+                    <label>Holiday days (count as overtime)</label>
+                    <div className="tl-holidays">
+                      {DAY_NAMES.map((name, idx) => (
+                        <div key={name} className={`tl-day-chip ${settingsDraft.holidayDays.includes(idx) ? "active" : ""}`}
+                          onClick={() => setSettingsDraft((s) => ({
+                            ...s,
+                            holidayDays: s.holidayDays.includes(idx) ? s.holidayDays.filter((d) => d !== idx) : [...s.holidayDays, idx],
+                          }))}>
+                          {name}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  </div>
                 </div>
+                <p className="tl-note tl-modal-rate">
+                  Hourly rate is derived as monthly salary ÷ standard hours per month, currently <b>{settingsDraft.currency || "—"} {draftHourlyRate.toFixed(2)}/hr</b>.
+                </p>
+              </div>
+              <div className="tl-modal-foot">
+                <button className="tl-btn" onClick={closeSettings}>Cancel</button>
+                <button className="tl-btn primary" onClick={saveSettings}>Save changes</button>
               </div>
             </div>
-            <p className="tl-note">Hourly rate is derived as monthly salary ÷ standard hours per month, currently {currency} {monthStats.hourlyRate.toFixed(2)}/hr. Changes save automatically to your account.</p>
           </div>
         )}
 
