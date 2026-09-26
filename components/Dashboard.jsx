@@ -346,29 +346,17 @@ export default function Dashboard({ session }) {
       const s = computeEntryStats(e, settings, now);
       return {
         Date: e.date,
-        Day: DAY_NAMES[dayOfWeekForDateStr(e.date)],
         "Clock In": e.clockIn ? formatHM(new Date(e.clockIn)) : "",
         "Clock Out": e.clockOut ? formatHM(new Date(e.clockOut)) : "",
-        "Hours Worked": Number(s.hours.toFixed(2)),
-        "Regular Hours": Number(s.regularHours.toFixed(2)),
-        "Overtime Hours": Number(s.overtimeHours.toFixed(2)),
-        Holiday: s.isHoliday ? "Yes" : "No",
+        Hours: Number(s.hours.toFixed(2)),
       };
     });
     const sheet = XLSX.utils.json_to_sheet(logRows);
     if (logRows.length > 0) {
-      const totals = logRows.reduce((acc, r) => ({
-
-        hours: acc.hours + r["Hours Worked"],
-        regular: acc.regular + r["Regular Hours"],
-        overtime: acc.overtime + r["Overtime Hours"],
-      }), { hours: 0, regular: 0, overtime: 0 });
+      const totalHours = logRows.reduce((acc, r) => acc + r.Hours, 0);
       XLSX.utils.sheet_add_json(sheet, [{
-
         Date: "TOTAL",
-        "Hours Worked": Number(totals.hours.toFixed(2)),
-        "Regular Hours": Number(totals.regular.toFixed(2)),
-        "Overtime Hours": Number(totals.overtime.toFixed(2)),
+        Hours: Number(totalHours.toFixed(2)),
       }], { origin: -1 });
     }
     XLSX.utils.book_append_sheet(wb, sheet, "Attendance Log");
@@ -412,7 +400,7 @@ export default function Dashboard({ session }) {
 
         if (wb.SheetNames.includes("Attendance Log")) {
           const rows = XLSX.utils.sheet_to_json(wb.Sheets["Attendance Log"]);
-          const importedEntries = rows.filter((r) => r["Date"]).map((r) => {
+          const importedEntries = rows.filter((r) => r["Date"] && String(r["Date"]).toUpperCase() !== "TOTAL").map((r) => {
             const date = String(r["Date"]);
             const clockIn = r["Clock In"] ? new Date(`${date}T${r["Clock In"]}:00`).toISOString() : null;
             const clockOut = r["Clock Out"] ? new Date(`${date}T${r["Clock Out"]}:00`).toISOString() : null;
